@@ -1,0 +1,13 @@
+{
+  "name": "plex-renamer",
+  "version": "1.0.0",
+  "main": "script.js",
+  "type": "module",
+  "author": "Townsy45",
+  "license": "ISC",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "ora": "^6.0.1",
+    "prompts": "^2.4.2"
+  }
+}
