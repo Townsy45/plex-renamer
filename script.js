@@ -10,6 +10,9 @@ const state = {};
 // Options object for Prompts that clears the terminal after each question submission
 const clearOnSubmit = { onSubmit: () => console.clear() };
 
+// Useful prototypes
+Array.prototype.sortByIndex = function (arrayOfIndices) { return arrayOfIndices?.map(i => this[i]); };
+
 // Main IIFE Function
 (async () => {
 
@@ -96,48 +99,16 @@ async function handleTV() {
       initial: 1,
       min: 1
     },
-    // Ask if they are in the correct order (yes/no)
-    {
-      type: 'toggle',
-      name: 'order',
-      message: Chalk.green(`Are these in the correct order?\n\n${state.files.map((f, i) => Chalk.blue(`Episode ${i+1}: ${f.original_name}`)).join('\n')}\n\n`),
-      format: (correct) => !correct ? Array.from({ length: state.files.length },(_, i)=>i) : false,
-      initial: false,
-      active: 'No',
-      inactive: 'Yes'
-    },
-    // If NOT in order Ask to select episode for every episode file in order
-    ...state.files.map((f, i) => ({
-      type: prev => !Array.isArray(prev) ? 'select' : null,
-      name: `episode-${i}`,
-      message: Chalk.green(`Please select the file to be used for Episode ${i+1}\n`),
-      format: (value) => ({ episode: value, order: i }),
-      choices: (prev, currValues) => state.files.map((f, i) => ({
-        title: f.original_name,
-        value: i,
-        // Disable if the episode has already been picked and is in the show object
-        disabled: !!Object.entries(currValues).filter(([k]) => k.startsWith('episode-'))?.find(([,cv]) => cv?.episode === i)
-      })),
-      // Set this to start on the previously selected episode so it's seamless
-      // TODO - Idea to move to the next available be that up or down an index, checking for start and end of the array.
-      initial: prev => prev?.episode
-    })),
   ], clearOnSubmit);
 
-  // Remove all the episode keys from the results of the questions as its a limit of the prompts system.
-  //  Remove episode key and add the episode index to the order array in the correct order.
-  if (!state.show.order) state.show.order = Object.entries(state.show)
-    .filter(([k]) => k.startsWith('episode-'))
-    .sort((o1, o2) => o1[1]?.order - o2[1]?.order)
-    .map(([k, e]) => { delete state.show[k]; return e.episode });
-
-
-  // TODO - Add a question to confirm new order
-  // TODO - Move file selector and order check to a new looping function so you can loop make changes if need be.
-
+  console.log('GETTING ORDER')
+  // Display the episodes in order and ask which order they should be in till correct, updates state.show property
+  await getEpisodeOrder(state.files);
 
   // Temp, log the state after all questions
-  console.log('State', state)
+  console.log('State', JSON.stringify(state))
+
+  console.log('FILES IN NEW ORDER', state.files.sortByIndex(state.show.order).map(f => f.original_name))
 
 }
 
@@ -146,5 +117,57 @@ async function handleTV() {
 async function handleFilm() {
 
   // TODO - Work on adding film re-namer
+
+}
+
+
+async function getEpisodeOrder(files) {
+
+  console.log('GETTING FILES', files)
+
+  state.show = {
+    ...state.show,
+    ...(await Prompts([
+      // Ask if they are in the correct order (yes/no)
+      {
+        type: 'toggle',
+        name: 'order',
+        message: Chalk.green(`Are these in the correct order?\n\n${files.map((f, i) => Chalk.blue(`Episode ${i+1}: ${f.original_name}`)).join('\n')}\n\n`),
+        // TODO - FIX THIS TO GET CORRECT UPDATED ORDER ON FINAL CONFIRM
+        format: (correct) => !correct ? !state.show.order ? Array.from({ length: files.length },(_, i)=>i) : state.show.order : false,
+        initial: false,
+        active: 'No',
+        inactive: 'Yes'
+      },
+      // If NOT in order Ask to select episode for every episode file in order
+      ...state.files.map((f, i) => ({
+        type: prev => !Array.isArray(prev) ? 'select' : null,
+        name: `episode-${i}`,
+        message: Chalk.green(`Please select the file to be used for Episode ${i+1}\n`),
+        format: (value) => ({ episode: value, order: i }),
+        choices: (prev, currValues) => files.map((f, i) => ({
+          title: f.original_name,
+          value: i,
+          // Disable if the episode has already been picked and is in the show object
+          disabled: !!Object.entries(currValues).filter(([k]) => k.startsWith('episode-'))?.find(([,cv]) => cv?.episode === i)
+        })),
+        // Set this to start on the previously selected episode so it's seamless
+        // TODO - Idea to move to the next available be that up or down an index, checking for start and end of the array.
+        initial: prev => prev?.episode
+      }))
+    ], clearOnSubmit))
+  };
+
+  if (!state.show.order) {
+    // Remove all the episode keys from the results of the questions as its a limit of the prompts system.
+    //  Remove episode key and add the episode index to the order array in the correct order.
+    state.show.order = Object.entries(state.show)
+      .filter(([k]) => k.startsWith('episode-'))
+      .sort((o1, o2) => o1[1]?.order - o2[1]?.order)
+      .map(([k, e]) => { delete state.show[k]; return e.episode });
+
+    // Re-start the loop asking if it is correct
+    await getEpisodeOrder(files.sortByIndex(state.show.order));
+  }
 
 }
